@@ -6,7 +6,7 @@ use super::Wrap;
 impl<'a, Pe32: pe32::Pe<'a>, Pe64: pe64::Pe<'a>> Wrap<pe32::scanner::Scanner<Pe32>, pe64::scanner::Scanner<Pe64>> {
 	/// Finds the unique match for the pattern in the given range.
 	#[inline]
-	pub fn finds(&self, pat: &[pattern::Atom], range: Range<u32>, save: &mut [u32]) -> bool {
+	pub fn finds(&self, pat: &[pattern::Atom], range: Range<u32>, save: &mut [usize]) -> bool {
 		match self {
 			Wrap::T32(scanner) => scanner.finds(pat, range, save),
 			Wrap::T64(scanner) => scanner.finds(pat, range, save),
@@ -14,7 +14,7 @@ impl<'a, Pe32: pe32::Pe<'a>, Pe64: pe64::Pe<'a>> Wrap<pe32::scanner::Scanner<Pe3
 	}
 	/// Finds the unique code match for the pattern.
 	#[inline]
-	pub fn finds_code(&self, pat: &[pattern::Atom], save: &mut [u32]) -> bool {
+	pub fn finds_code(&self, pat: &[pattern::Atom], save: &mut [usize]) -> bool {
 		match self {
 			Wrap::T32(scanner) => scanner.finds_code(pat, save),
 			Wrap::T64(scanner) => scanner.finds_code(pat, save),
@@ -38,7 +38,7 @@ impl<'a, Pe32: pe32::Pe<'a>, Pe64: pe64::Pe<'a>> Wrap<pe32::scanner::Scanner<Pe3
 	}
 	/// Pattern interpreter, returns if the pattern matches the binary image at the given rva.
 	#[inline]
-	pub fn exec(&self, cursor: u32, pat: &[pattern::Atom], save: &mut [u32]) -> bool {
+	pub fn exec(&self, cursor: u32, pat: &[pattern::Atom], save: &mut [usize]) -> bool {
 		match self {
 			Wrap::T32(scanner) => scanner.exec(cursor, pat, save),
 			Wrap::T64(scanner) => scanner.exec(cursor, pat, save),
@@ -81,7 +81,7 @@ impl<'a, 'pat, Pe32: pe32::Pe<'a>, Pe64: pe64::Pe<'a>> Wrap<pe32::scanner::Match
 	}
 	/// Finds the next match with the given save array.
 	#[inline]
-	pub fn next(&mut self, save: &mut [u32]) -> bool {
+	pub fn next(&mut self, save: &mut [usize]) -> bool {
 		match self {
 			Wrap::T32(matches) => matches.next(save),
 			Wrap::T64(matches) => matches.next(save),

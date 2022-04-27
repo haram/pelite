@@ -67,7 +67,7 @@ impl<'a, P: Pe<'a>> Scanner<P> {
 	/// Returns `false` if no match is found or multiple matches are found to prevent subtle bugs where a pattern goes stale by not being unique any more.
 	///
 	/// Use `matches(pat, range).next(save)` if just the first match is desired.
-	pub fn finds(&self, pat: &[pat::Atom], range: Range<Rva>, save: &mut [Rva]) -> bool {
+	pub fn finds(&self, pat: &[pat::Atom], range: Range<Rva>, save: &mut [usize]) -> bool {
 		let mut matches = self.matches(pat, range);
 		if !matches.next(save) {
 			return false;
@@ -83,7 +83,7 @@ impl<'a, P: Pe<'a>> Scanner<P> {
 	/// Finds the unique code match for the pattern.
 	///
 	/// Restricts the range to the code section. See [`finds`](#finds) for more information.
-	pub fn finds_code(&self, pat: &[pat::Atom], save: &mut [Rva]) -> bool {
+	pub fn finds_code(&self, pat: &[pat::Atom], save: &mut [usize]) -> bool {
 		self.finds(pat, self.pe.headers().code_range(), save)
 	}
 	/// Returns an iterator over the matches of a pattern within the given range.
@@ -103,7 +103,7 @@ impl<'a, P: Pe<'a>> Scanner<P> {
 	///
 	/// In case of mismatch, ie. returns false, the save array is still overwritten with temporary data and should be considered trashed.
 	/// Keep a copy, invoke with a fresh save array or reexecute the pattern at the saved cursor to get around this.
-	pub fn exec(&self, cursor: Rva, pat: &[pat::Atom], save: &mut [Rva]) -> bool {
+	pub fn exec(&self, cursor: Rva, pat: &[pat::Atom], save: &mut [usize]) -> bool {
 		Exec { pe: self.pe, pat, cursor, pc: 0 }.exec(save)
 	}
 }
@@ -150,7 +150,7 @@ struct Exec<'pat, P> {
 	pc: usize,
 }
 impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
-	fn exec(&mut self, save: &mut [Rva]) -> bool {
+	fn exec(&mut self, save: &mut [usize]) -> bool {
 		const SKIP_VA: u32 = mem::size_of::<Va>() as u32;
 		let mut mask = 0xff;
 		let mut ext_range = 0u32;
@@ -167,7 +167,7 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 				},
 				pat::Atom::Save(slot) => {
 					if let Some(slot) = save.get_mut(slot as usize) {
-						*slot = self.cursor;
+						*slot = self.cursor as usize;
 					}
 				},
 				pat::Atom::Push(skip) => {
@@ -234,8 +234,8 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 				},
 				pat::Atom::Pir(slot) => {
 					if let Some(sdword) = self.pe.read::<i32>(self.cursor) {
-						let base = save.get(slot as usize).cloned().unwrap_or(self.cursor);
-						self.cursor = base.wrapping_add(sdword as Rva);
+						let base = save.get(slot as usize).cloned().unwrap_or(self.cursor as usize);
+						self.cursor = base.wrapping_add(sdword as usize) as Rva;
 					}
 					else {
 						return false;
@@ -272,7 +272,7 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 				},
 				pat::Atom::Check(slot) => {
 					if let Some(&rva) = save.get(slot as usize) {
-						if rva != self.cursor {
+						if rva as Rva != self.cursor {
 							return false;
 						}
 					}
@@ -285,7 +285,7 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 				pat::Atom::ReadU8(slot) => {
 					if let Some(byte) = self.pe.read::<u8>(self.cursor) {
 						if let Some(slot) = save.get_mut(slot as usize) {
-							*slot = byte as Rva;
+							*slot = byte as usize;
 						}
 						self.cursor = self.cursor.wrapping_add(1);
 					}
@@ -296,7 +296,7 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 				pat::Atom::ReadI8(slot) => {
 					if let Some(sbyte) = self.pe.read::<i8>(self.cursor) {
 						if let Some(slot) = save.get_mut(slot as usize) {
-							*slot = sbyte as Rva;
+							*slot = sbyte as usize;
 						}
 						self.cursor = self.cursor.wrapping_add(1);
 					}
@@ -307,7 +307,7 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 				pat::Atom::ReadU16(slot) => {
 					if let Some(word) = self.pe.read::<u16>(self.cursor) {
 						if let Some(slot) = save.get_mut(slot as usize) {
-							*slot = word as Rva;
+							*slot = word as usize;
 						}
 						self.cursor = self.cursor.wrapping_add(2);
 					}
@@ -318,7 +318,7 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 				pat::Atom::ReadI16(slot) => {
 					if let Some(sword) = self.pe.read::<i16>(self.cursor) {
 						if let Some(slot) = save.get_mut(slot as usize) {
-							*slot = sword as Rva;
+							*slot = sword as usize;
 						}
 						self.cursor = self.cursor.wrapping_add(2);
 					}
@@ -329,7 +329,7 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 				pat::Atom::ReadU32(slot) | pat::Atom::ReadI32(slot) => {
 					if let Some(dword) = self.pe.read::<Rva>(self.cursor) {
 						if let Some(slot) = save.get_mut(slot as usize) {
-							*slot = dword;
+							*slot = dword as usize;
 						}
 						self.cursor = self.cursor.wrapping_add(4);
 					}
@@ -337,6 +337,17 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 						return false;
 					}
 				},
+				pat::Atom::ReadU64(slot) | pat::Atom::ReadI64(slot) => {
+					if let Some(qword) = self.pe.read::<usize>(self.cursor) {
+						if let Some(slot) = save.get_mut(slot as usize) {
+							*slot = qword;
+						}
+						self.cursor = self.cursor.wrapping_add(8);
+					}
+					else {
+						return false;
+					}
+				}
 				pat::Atom::Zero(slot) => {
 					if let Some(slot) = save.get_mut(slot as usize) {
 						*slot = 0;
@@ -360,7 +371,7 @@ impl<'a, 'pat, P: Scan<'a>> Exec<'pat, P> {
 		}
 		return true;
 	}
-	fn exec_many(&mut self, save: &mut [Rva], limit: u32) -> bool {
+	fn exec_many(&mut self, save: &mut [usize], limit: u32) -> bool {
 		// Capture the current cursor and PC to restore while trying
 		let cursor = self.cursor;
 		let pc = self.pc;
@@ -464,7 +475,7 @@ impl<'a, 'pat, P: Pe<'a>> Matches<'pat, P> {
 		&qsbuf[..qslen]
 	}
 	// Select the search strategy and execute the query.
-	fn strategy(&mut self, qsbuf: &[u8], slice: &'a [u8], save: &mut [Rva]) -> bool {
+	fn strategy(&mut self, qsbuf: &[u8], slice: &'a [u8], save: &mut [usize]) -> bool {
 		// FIXME! Profile the performance!
 		if qsbuf.len() == 0 {
 			self.strategy0(qsbuf, slice, save)
@@ -478,7 +489,7 @@ impl<'a, 'pat, P: Pe<'a>> Matches<'pat, P> {
 	}
 	// Strategy:
 	//  Cannot optimize the search, just (slowly) brute-force it.
-	fn strategy0(&mut self, _qsbuf: &[u8], slice: &'a [u8], save: &mut [Rva]) -> bool {
+	fn strategy0(&mut self, _qsbuf: &[u8], slice: &'a [u8], save: &mut [usize]) -> bool {
 		let end = self.range.start + slice.len() as u32;
 		while self.range.start < end {
 			let cursor = self.range.start;
@@ -493,7 +504,7 @@ impl<'a, 'pat, P: Pe<'a>> Matches<'pat, P> {
 	// Strategy:
 	//  Prefix is too small for full blown quicksearch.
 	//  Memchr for the first byte and only eval pattern on potential matches.
-	fn strategy1(&mut self, qsbuf: &[u8], slice: &'a [u8], save: &mut [Rva]) -> bool {
+	fn strategy1(&mut self, qsbuf: &[u8], slice: &'a [u8], save: &mut [usize]) -> bool {
 		let byte = qsbuf[0];
 		// Find all places with matching byte
 		// TODO! Replace with actual memchr
@@ -511,7 +522,7 @@ impl<'a, 'pat, P: Pe<'a>> Matches<'pat, P> {
 	// Strategy:
 	//  Full blown quicksearch for the prefix.
 	//  Most likely completely unnecessary but oh well... it was fun to write!
-	fn strategy2(&mut self, qsbuf: &[u8], slice: &'a [u8], save: &mut [Rva]) -> bool {
+	fn strategy2(&mut self, qsbuf: &[u8], slice: &'a [u8], save: &mut [usize]) -> bool {
 		// Initialize jump table for quicksearch
 		let qslen = qsbuf.len();
 		let mut jumps = [qslen as u8; 256];
@@ -542,7 +553,7 @@ impl<'a, 'pat, P: Pe<'a>> Matches<'pat, P> {
 		return false;
 	}
 	/// Finds the next match with the given save array.
-	pub fn next(&mut self, save: &mut [Rva]) -> bool {
+	pub fn next(&mut self, save: &mut [usize]) -> bool {
 		// Build the quicksearch buffer
 		let mut qsbuf = [0u8; QS_BUF_LEN];
 		let qsbuf = self.setup(&mut qsbuf);
@@ -568,7 +579,7 @@ impl<'a, 'pat, P: Pe<'a>> Matches<'pat, P> {
 			},
 		}
 	}
-	fn next_section(&mut self, qsbuf: &[u8], base: Rva, slice: &'a [u8], save: &mut [Rva]) -> bool {
+	fn next_section(&mut self, qsbuf: &[u8], base: Rva, slice: &'a [u8], save: &mut [usize]) -> bool {
 		// Let's talk about this code for a sec, for it has a problem.
 		// This method gets called for every section and is supposed to find matches in that section.
 		// A match is found, true is returned, all is well?
@@ -613,7 +624,7 @@ pub(crate) fn test<'a, P: Pe<'a>>(pe: P) -> crate::Result<()> {
 fn exec_tests_parse_docs() {
 	use crate::pattern::{Atom, parse};
 
-	fn exec(bytes: &[u8], pat: &[Atom], save: &mut [Rva]) -> bool {
+	fn exec(bytes: &[u8], pat: &[Atom], save: &mut [usize]) -> bool {
 		Exec { pe: bytes, pat, cursor: 0, pc: 0 }.exec(save)
 	}
 
