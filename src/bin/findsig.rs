@@ -83,7 +83,7 @@ fn main() {
 	}
 }
 
-fn process_patterns(patterns: &[String], json: bool, f: &mut dyn FnMut(&[pat::Atom], &mut [u32])) {
+fn process_patterns(patterns: &[String], json: bool, f: &mut dyn FnMut(&[pat::Atom], &mut [usize])) {
 	if patterns.len() > 0 {
 		// Read from the command line args if available
 		if json {
@@ -119,7 +119,7 @@ fn process_patterns(patterns: &[String], json: bool, f: &mut dyn FnMut(&[pat::At
 		}
 	}
 }
-fn process_pattern(pattern_str: &str, json: bool, f: &mut dyn FnMut(&[pat::Atom], &mut [u32])) {
+fn process_pattern(pattern_str: &str, json: bool, f: &mut dyn FnMut(&[pat::Atom], &mut [usize])) {
 	// Parse the pattern
 	let pattern = match pat::parse(pattern_str) {
 		Ok(pattern) => pattern,
@@ -142,7 +142,7 @@ fn process_pattern(pattern_str: &str, json: bool, f: &mut dyn FnMut(&[pat::Atom]
 		print!("]}}");
 	}
 }
-fn print_match(file_name: &str, save: &[u32]) {
+fn print_match(file_name: &str, save: &[usize]) {
 	print!("  {}!{:#010x}", file_name, save[0]);
 	if save.len() > 1 {
 		print!("  [");
@@ -153,7 +153,7 @@ fn print_match(file_name: &str, save: &[u32]) {
 	}
 	println!();
 }
-fn print_json(save: &[u32]) {
+fn print_json(save: &[usize]) {
 	print!("[");
 	let mut first = true;
 	for value in save {

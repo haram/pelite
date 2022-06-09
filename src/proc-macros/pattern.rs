@@ -34,7 +34,7 @@ Create a scanner instance for [PE32](../pe32/trait.Pe.html#method.scanner) or [P
 This requires knowledge with reverse engineering programs.
 
 Here's a resource to learn more about signature scanning: [wiki.alliedmods.net](https://wiki.alliedmods.net/Signature_scanning).
-*/
+ */
 
 #![allow(ellipsis_inclusive_range_patterns)]
 
@@ -201,11 +201,11 @@ pub fn save_len(pat: &[Atom]) -> usize {
             | Atom::ReadI8(slot)
             | Atom::ReadI16(slot)
             | Atom::ReadI32(slot)
-			| Atom::ReadI64(slot)
+            | Atom::ReadI64(slot)
             | Atom::ReadU8(slot)
             | Atom::ReadU16(slot)
             | Atom::ReadU32(slot)
-			| Atom::ReadU64(slot) => Some(slot as usize + 1),
+            | Atom::ReadU64(slot) => Some(slot as usize + 1),
             _ => None,
         })
         .max()
@@ -225,7 +225,7 @@ pub fn save_len(pat: &[Atom]) -> usize {
 ///
 /// Case insensitive hexadecimal characters match the exact byte pattern and question marks serve as placeholders for unknown bytes.
 ///
-/// Note that a single question mark matches a whole byte. The syntax to mask part of a byte is not yet available.
+/// Note that a single question mark matches a whole byte. To match partial bytes, use a dot `.` instead.
 ///
 /// Spaces (code point 32) are completely optional and carry no semantic meaning, their purpose is to visually group things together.
 ///
@@ -489,11 +489,32 @@ fn parse_helper(pat: &mut &str, result: &mut Vec<Atom>) -> Result<(), PatError> 
                     chr - b'A' + 10
                 } else if chr >= b'0' && chr <= b'9' {
                     chr - b'0'
+                }
+                // If next character is a nibble match then mask for hi nibble and ignore lo.
+                else if chr == b'.' {
+                    result.push(Atom::Fuzzy(0xF0));
+                    0
                 } else {
                     return Err(PatError::UnpairedHexDigit);
                 };
                 // Add byte to the pattern
                 result.push(Atom::Byte((hi << 4) + lo));
+            }
+            // Match a low nibble
+            b'.' => {
+                result.push(Atom::Fuzzy(0x0F));
+                result.push(Atom::Byte({
+                    chr = iter.next().cloned().ok_or(PatError::UnpairedHexDigit)?;
+                    if chr >= b'a' && chr <= b'f' {
+                        chr - b'a' + 10
+                    } else if chr >= b'A' && chr <= b'F' {
+                        chr - b'A' + 10
+                    } else if chr >= b'0' && chr <= b'9' {
+                        chr - b'0'
+                    } else {
+                        return Err(PatError::UnpairedHexDigit);
+                    }
+                }));
             }
             // Match raw bytes
             b'"' => loop {
@@ -549,7 +570,7 @@ fn parse_helper(pat: &mut &str, result: &mut Vec<Atom>) -> Result<(), PatError> 
                     Some(b'1') => Atom::ReadI8(save),
                     Some(b'2') => Atom::ReadI16(save),
                     Some(b'4') => Atom::ReadI32(save),
-					Some(b'8') => Atom::ReadI64(save),
+                    Some(b'8') => Atom::ReadI64(save),
                     _ => return Err(PatError::ReadOperand),
                 };
                 if save >= u8::MAX {
@@ -563,7 +584,7 @@ fn parse_helper(pat: &mut &str, result: &mut Vec<Atom>) -> Result<(), PatError> 
                     Some(b'1') => Atom::ReadU8(save),
                     Some(b'2') => Atom::ReadU16(save),
                     Some(b'4') => Atom::ReadU32(save),
-					Some(b'8') => Atom::ReadU64(save),
+                    Some(b'8') => Atom::ReadU64(save),
                     _ => return Err(PatError::ReadOperand),
                 };
                 if save >= u8::max_value() {
@@ -627,6 +648,20 @@ mod tests {
         assert_eq!(
             parse("12 34 56 ? ?"),
             Ok(vec![Save(0), Byte(0x12), Byte(0x34), Byte(0x56)])
+        );
+
+        assert_eq!(
+            parse("7. ? [0-6] .D 4C"),
+            Ok(vec![
+                Save(0),
+                Fuzzy(0xF0),
+                Byte(0x70),
+                Skip(1),
+                Many(6),
+                Fuzzy(0x0F),
+                Byte(0x0D),
+                Byte(0x4C)
+            ])
         );
 
         assert_eq!(

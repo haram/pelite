@@ -30,7 +30,7 @@ fn example(file: PeFile<'_>, pat: &[pat::Atom]) {
 	}
 }
 ```
-*/
+ */
 
 use std::{cmp, mem, ptr};
 use std::ops::Range;
@@ -633,6 +633,10 @@ fn exec_tests_parse_docs() {
 		let pat = parse("55 89 e5 83 ? ec").unwrap();
 		assert!(exec(&bytes, &pat, &mut []));
 	}{
+		let bytes = [0x73, 0x87, 0xC0, 0x99, 0x88, 0x7D, 0x4C];
+		let pat = parse("7. ? [0-6] .D 4C").unwrap();
+		assert!(exec(&bytes, &pat, &mut []));
+	}{
 		let bytes = [0xb9, 0x37, 0x13, 0x00, 0x00];
 		let pat = parse("b9 '37 13 00 00").unwrap();
 		let mut save = [0; 2];
@@ -680,7 +684,7 @@ fn exec_tests_parse_docs() {
 		let pat = parse("e8 i1 a0 u4").unwrap();
 		let mut save = [0; 3];
 		assert!(exec(&bytes, &pat, &mut save));
-		assert_eq!(save[1], (-1i8) as u32);
+		assert_eq!(save[1], (-1i8) as usize);
 		assert_eq!(save[2], 0x12345678);
 	}{
 		let bytes1 = [0x83, 0xc0, 0x2a, 0x6a, 0x00, 0xe8];
